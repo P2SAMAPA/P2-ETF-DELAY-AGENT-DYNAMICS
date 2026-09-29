@@ -105,6 +105,30 @@ same way the real hits are — pooling a single chance rate across ETFs would
 let an onset on one ETF "explain" an event on another, which cannot happen,
 and would overstate the chance baseline).
 
+## Selection sample-size floor (added after the first live run)
+
+The first real run picked, in every universe, the longest trend span, longest
+horizon, and largest window — precisely the grid cells with the FEWEST
+non-overlapping test periods (a 20-day horizon leaves ~20x fewer periods than
+a 1-day horizon over the same history). One universe's winner showed a
+striking selection-segment edge (t=+2.06) that collapsed on its own holdout
+(t=+0.39, net spread flipped sign) — while a passed-over config with ~9x more
+selection periods had a smaller but far more consistent edge that held up on
+a holdout roughly 4x larger. A plain t-stat already divides by sqrt(n), but
+that doesn't stop a thin-sample cell's REALIZED t-stat from being a much
+noisier random variable than a large-sample cell's — so ranking many configs
+by raw t-stat alone systematically favors whichever noisy cell got lucky.
+
+`trainer.select_config` now also requires a configuration's selection-segment
+period count to clear a floor relative to the largest period count in that
+pool (`config.MIN_SELECTION_N_FRACTION`, default 0.15), in addition to an
+absolute floor (`MIN_SELECTION_N`, default 50). Re-run against the real grid
+from that first live run, this shifted the flagged winner to the
+large-sample, holdout-consistent configuration and — tellingly — also
+revealed that the universe which had looked most promising no longer clears
+the eligibility gate at all once its noisiest cell is excluded, which is the
+more honest read of that universe's evidence.
+
 ## Repo structure
 
 ```

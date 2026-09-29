@@ -86,11 +86,24 @@ def confidence_label(hold: Dict) -> str:
 def select_config(grid: List[Dict], trend_span: Optional[int] = None):
     """
     Choose a configuration from the SELECTION segment only: eligible if
-    rank-IC and net top-N spread are both positive there; among eligible,
-    rank-sum of the two t-stats. If nothing is eligible, fall back to all
-    configs and report gate_passed=False.
+    rank-IC and net top-N spread are both positive there, AND the config's
+    selection-segment period count clears both an absolute floor
+    (MIN_SELECTION_N) and a floor relative to the largest period count seen
+    anywhere in this pool (MIN_SELECTION_N_FRACTION) — see config.py's
+    comment on MIN_SELECTION_N_FRACTION for why the relative floor matters:
+    a thin-sample cell's t-stat is a noisier random variable than a
+    large-sample cell's even though the formula already divides by sqrt(n),
+    so ranking by raw t-stat alone systematically favors whichever noisy
+    cell got lucky. Among eligible configs, rank-sum of the two t-stats. If
+    nothing is eligible, fall back to the size-filtered pool (still
+    respecting both floors) and report gate_passed=False.
     """
-    pool = [g for g in grid if (trend_span is None or g["trend_span"] == trend_span) and g["selection"].get("n", 0) >= 20]
+    pool = [g for g in grid if (trend_span is None or g["trend_span"] == trend_span)
+            and g["selection"].get("n", 0) >= config.MIN_SELECTION_N]
+    if not pool:
+        return None, False
+    max_n = max(g["selection"]["n"] for g in pool)
+    pool = [g for g in pool if g["selection"]["n"] >= config.MIN_SELECTION_N_FRACTION * max_n]
     if not pool:
         return None, False
     elig = [g for g in pool if g["selection"]["ic_mean"] > 0 and g["selection"]["net_spread_mean"] > 0]

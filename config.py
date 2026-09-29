@@ -90,6 +90,28 @@ IC_T_HIGH = 1.65
 # {"trend_span": 126, "horizon": 5, "window": 756}. None = select.
 PINNED_CONFIG = None
 
+# Selection eligibility also requires a RELATIVE sample-size floor: a
+# candidate's selection-segment period count must be at least
+# MIN_SELECTION_N_FRACTION of the largest period count seen anywhere in that
+# universe's grid (in addition to the absolute MIN_SELECTION_N floor).
+#
+# Why: a plain t-stat already divides by sqrt(n), but that doesn't stop a
+# small-n cell's REALIZED t-stat from being a much noisier random variable
+# than a large-n cell's — so ranking many configs by raw t-stat systematically
+# favors whichever noisy, thin-sample cell got lucky. Concretely, on the
+# first real run every universe's winning config landed on the longest
+# trend span AND longest horizon AND largest window — precisely the cells
+# with the FEWEST test periods (a 20-day horizon leaves ~20x fewer
+# non-overlapping periods than a 1-day horizon over the same history). One
+# universe's winner showed a striking selection-segment edge (t=+2.06) that
+# collapsed on its own holdout (t=+0.39, net spread flipped sign) — while a
+# passed-over config with ~9x more selection periods had a smaller but far
+# more consistent edge that actually held up on a holdout ~4x larger. The
+# relative floor keeps such thin-sample cells from winning purely on
+# variance; see trainer.select_config.
+MIN_SELECTION_N = 50
+MIN_SELECTION_N_FRACTION = 0.15
+
 # Pre-crash / pre-breakout lead diagnostic: does a stability-margin onset
 # (crossing below MARGIN_THRESHOLD) tend to sit before a large realized move
 # — up OR down, since a Hopf-type crossing predicts a growing OSCILLATION,

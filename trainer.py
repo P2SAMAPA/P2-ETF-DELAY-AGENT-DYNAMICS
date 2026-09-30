@@ -59,7 +59,7 @@ def _clean(d: Dict) -> Dict:
             for k, v in d.items()}
 
 
-def confidence_label(hold: Dict) -> str:
+def confidence_label(hold: Dict, gate_passed: bool = True) -> str:
     """
     Graded on the HOLDOUT of the selected configuration (a single
     pre-selected config, so a one-sided 5% test is legitimate), and only
@@ -69,8 +69,23 @@ def confidence_label(hold: Dict) -> str:
                the baseline on both IC and net spread.
       Medium : IC > 0, net spread > 0, and beats the baseline on both IC and
                net spread.
-      Low    : anything else, or fewer than MIN_HOLDOUT_PERIODS test periods.
+      Low    : anything else, or fewer than MIN_HOLDOUT_PERIODS test periods,
+               or `gate_passed` is False.
+
+    `gate_passed=False` means NO configuration was profitable on the
+    SELECTION segment for this pool — the config being scored here is only
+    "the best of a bad lot" (see select_config), not one that cleared its own
+    eligibility bar. Good-looking holdout numbers on a config that failed
+    that bar are not good evidence of anything systematic, so this caps
+    confidence at Low regardless of the holdout stats below — this was found
+    to matter in practice: a real run had gate_passed=False together with a
+    holdout IC t-stat sitting right at the High threshold (1.48 one day,
+    1.72 the next, on otherwise near-identical numbers), which without this
+    cap would flip between Medium and High on pure day-to-day noise while
+    the selection segment quietly kept failing to validate the config at all.
     """
+    if not gate_passed:
+        return "Low"
     if hold.get("n", 0) < config.MIN_HOLDOUT_PERIODS:
         return "Low"
     ic, sp = hold["ic_mean"], hold["net_spread_mean"]
@@ -228,11 +243,14 @@ def analyze_universe(name: str, tickers: List[str], prices_df: pd.DataFrame) -> 
         match = [g for g in grid if g["trend_span"] == pin["trend_span"] and g["horizon"] == pin["horizon"] and g["window"] == pin["window"]]
         if match:
             selected, pinned = match[0], True
+            gate = True   # a pinned config bypasses the normal selection gate entirely (the
+                          # user chose it directly), so it shouldn't be capped as "best of a
+                          # bad lot" on the strength of a gate check that never ran for it.
     if selected is None:
         return None
 
     ls = live_for(selected)
-    conf = confidence_label(selected["holdout"])
+    conf = confidence_label(selected["holdout"], gate)
     picks = base_picks = []
     if ls is not None:
         picks = make_picks(ls["score_m"], available, ls["dispersion"], selected["horizon"], conf, config.TOP_N)
@@ -244,13 +262,14 @@ def analyze_universe(name: str, tickers: List[str], prices_df: pd.DataFrame) -> 
         if g is None:
             continue
         lst = live_for(g)
+        tconf = confidence_label(g["holdout"], tgate)
         trend_picks[str(trend_span)] = {
             "config": {"trend_span": trend_span, "horizon": g["horizon"], "window": g["window"]},
             "gate_passed": tgate,
             "holdout": g["holdout"],
-            "confidence": confidence_label(g["holdout"]),
+            "confidence": tconf,
             "picks": make_picks(lst["score_m"], available, lst["dispersion"], g["horizon"],
-                                confidence_label(g["holdout"]), config.TOP_N) if lst is not None else [],
+                                tconf, config.TOP_N) if lst is not None else [],
         }
 
     wf, split = wf_store[(selected["trend_span"], selected["horizon"], selected["window"])]

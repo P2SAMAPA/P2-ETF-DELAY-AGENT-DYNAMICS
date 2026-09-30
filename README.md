@@ -129,6 +129,29 @@ revealed that the universe which had looked most promising no longer clears
 the eligibility gate at all once its noisiest cell is excluded, which is the
 more honest read of that universe's evidence.
 
+## Confidence capped by the selection gate (added after two live runs)
+
+Two consecutive real runs stayed on the same selected configuration for
+FI_COMMODITIES (the sample-size floor above is working — no more day-to-day
+flip-flopping), but exposed a separate gap: `confidence_label` only looked
+at holdout stats and never checked whether the config's SELECTION segment
+had actually cleared its own eligibility bar (`gate_passed`). Concretely,
+that FI configuration's selection-segment net spread was negative both
+days — `select_config` had already fallen back to "best of a bad lot" for
+it — yet its holdout IC t-stat sat right at `IC_T_HIGH` (1.48 one day, 1.72
+the next, on otherwise near-identical numbers) and so the label flipped from
+Medium to High purely by crossing that boundary, with no acknowledgment that
+the underlying config had never actually validated on its own selection
+segment.
+
+`confidence_label` now takes `gate_passed` and returns "Low" immediately
+when it's False, regardless of how good the holdout numbers look — good
+holdout performance from a configuration that failed its own selection-segment
+eligibility check is not good evidence of anything systematic. A pinned
+configuration (`config.PINNED_CONFIG`) bypasses this — it was chosen
+directly, not by the gated selection process, so it isn't penalized for a
+gate check that never ran for it.
+
 ## Repo structure
 
 ```
